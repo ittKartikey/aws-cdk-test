@@ -1,13 +1,12 @@
-import { EnvStackProps } from '../configuration_parameters'
+import { EnvProps } from '../configuration_parameters';
 import * as cdk from 'aws-cdk-lib';
 import { RemovalPolicy ,aws_lambda as lambda, aws_dynamodb as dynamodb, aws_apigateway as apigateway, aws_s3 as s3 } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-// import * as cdk from 'aws-cdk-lib';
 import path = require('path');
 
 
 export class CdkAssignmentStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props: EnvStackProps ) {
+  constructor(scope: Construct, id: string, props: EnvProps ) {
     super(scope, id, props);
 
     const bcbsaUserDBTable = new dynamodb.Table(this, 'bcbsaUserDynamoDBTable', {
@@ -17,7 +16,7 @@ export class CdkAssignmentStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       removalPolicy: RemovalPolicy.DESTROY
-    })
+    });
     
     const bcbsaUserDynamoDBDataPostingLambda = new lambda.Function(this, 'bcbsaUserDynamoDBDataPostingLambda', {
       functionName: props.BCBSA_USERS_POSTING_LAMBDA_NAME,
@@ -40,19 +39,20 @@ export class CdkAssignmentStack extends cdk.Stack {
         "S3_BUCKET_NAME": props.BCBSA_USERS_S3_BUCKET_NAME
       }
     });
-    bcbsaUserDBTable.grantReadData(bcbsaSearchUsersDynamoDBLambda)
+    bcbsaUserDBTable.grantReadData(bcbsaSearchUsersDynamoDBLambda);
     
     const bcbsaUsersCSVS3Bucket = new s3.Bucket(this, 'bcbsaUsersCSVS3Bucket',{
       bucketName: props.BCBSA_USERS_S3_BUCKET_NAME,
       autoDeleteObjects: true,
       removalPolicy: RemovalPolicy.DESTROY
     });
-    bcbsaUsersCSVS3Bucket.grantWrite(bcbsaSearchUsersDynamoDBLambda)
+    bcbsaUsersCSVS3Bucket.grantWrite(bcbsaSearchUsersDynamoDBLambda);
 
     const bcbsaLambdaRestApiEndpoint = new apigateway.RestApi(this, 'bcbsaLambdaRestApiEndpoint', {
       restApiName: props.BCBSA_REST_API_ENDPOINT_NAME,
+      deploy: false
     });
-    bcbsaLambdaRestApiEndpoint.applyRemovalPolicy(RemovalPolicy.DESTROY)
+    bcbsaLambdaRestApiEndpoint.applyRemovalPolicy(RemovalPolicy.DESTROY);
     
     const bcbsaUsersResource = bcbsaLambdaRestApiEndpoint.root.addResource('users');
     const bcbsaUsersLambdaIntegration = new apigateway.LambdaIntegration(bcbsaUserDynamoDBDataPostingLambda);
@@ -60,6 +60,18 @@ export class CdkAssignmentStack extends cdk.Stack {
     
     const bcbsaSearchUsersResource = bcbsaUsersResource.addResource('search_users');
     const bcbsaSearchUsersLambdaIntegration = new apigateway.LambdaIntegration(bcbsaSearchUsersDynamoDBLambda);
-    bcbsaSearchUsersResource.addMethod('POST', bcbsaSearchUsersLambdaIntegration)
+    bcbsaSearchUsersResource.addMethod('POST', bcbsaSearchUsersLambdaIntegration);
+
+    const apiDeployment = new apigateway.Deployment(this, 'ApiDeployment', {
+      api: bcbsaLambdaRestApiEndpoint,
+    });
+    
+    const apiStage = new apigateway.Stage(this, 'ApiStage', {
+      deployment: apiDeployment,
+      stageName: props.BCBSA_API_DEPLOYMENT_STAGE_ENV_NAME, 
+    });
+
+    bcbsaLambdaRestApiEndpoint.deploymentStage = apiStage;
+
   }
 }
